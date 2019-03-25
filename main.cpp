@@ -67,7 +67,7 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 	ModelData * records = new ModelData[totalRecords];
 
 	for (int i = 0; i < totalRecords; i++) {
-		if ((i % (num + rem)) - num >= 0) {
+		if ((i % (num + rem)) - num >= 0 && i / (num + rem) != (communicatorSize - 1)) {
 			records[i].model = -42;
 		} else {
 			int modelNum, date;
@@ -97,7 +97,7 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 		MPI_Isend(&initData, 3, MPI_INT, i, 0, dataComm, &sendReq[0]);
 	}
 
-	MPI_Scatter(&records, recordsToProcess, ModelDataStruct, MPI_IN_PLACE, recordsToProcess, ModelDataStruct, 0, dataComm);
+	MPI_Scatter(records, recordsToProcess, ModelDataStruct, MPI_IN_PLACE, recordsToProcess, ModelDataStruct, 0, dataComm);
 
 	float * entireFile = new float[numModels];
 	float * givenYear = new float[numModels];
@@ -130,6 +130,7 @@ void ranki(int reportYear, char customerType, MPI_Comm dataComm) {
 	int recordsToProcess = initData[0];
 	int numModels = initData[1];
 	int fullRecord = initData[2];
+	
 	if (recordsToProcess == -1) {
 		// Error.
 		MPI_Finalize();
@@ -140,7 +141,7 @@ void ranki(int reportYear, char customerType, MPI_Comm dataComm) {
 	defineStructDataToMPI(&ModelDataStruct);
 
 	ModelData * data = new ModelData[fullRecord];
-	MPI_Scatter(&data, fullRecord, ModelDataStruct, &data, fullRecord, ModelDataStruct, 0, dataComm);
+	MPI_Scatter(data, fullRecord, ModelDataStruct, data, fullRecord, ModelDataStruct, 0, dataComm);
 
 	MPI_Request req;
 
