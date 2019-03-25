@@ -7,8 +7,6 @@
 
 static const int NUM_DATA_FIELDS = 4;
 
-#define DEBUG false // True to see debug messages
-
 struct ModelData {
 	int model;
 	int purchaseDate;
@@ -91,23 +89,17 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 
 }
 
-void ranki(int rank, int reportYear, char customerType, MPI_Comm dataComm) {
+void ranki(int reportYear, char customerType, MPI_Comm dataComm) {
 	int initData[2];
 	MPI_Recv(&initData, 2, MPI_INT, 0, 0, dataComm, MPI_STATUS_IGNORE);
 	int recordsToProcess = initData[0];
 	int numModels = initData[1];
-	#if DEBUG
-	std::cout << "Rank " << rank-1 << " should process " << recordsToProcess << " records. There are " << numModels << " models\n";
-	#endif
 
 	MPI_Datatype ModelDataStruct;
 	defineStructDataToMPI(&ModelDataStruct);
 
 	ModelData * data = new ModelData[recordsToProcess];
 	MPI_Recv(data, recordsToProcess, ModelDataStruct, 0, 1, dataComm, MPI_STATUS_IGNORE);
-	#if DEBUG
-	std::cout << "Rank " << rank-1 << " received its chunk of model data\n";
-	#endif
 
 	MPI_Request req;
 
@@ -165,9 +157,6 @@ void errorReporter() {
 	}
 	int temp = 1;
 	MPI_Ssend(&temp, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-	#if DEBUG
-	std::cout << "Error reported finished\n";
-	#endif
 }
 
 int main(int argc, char** argv) {
@@ -192,7 +181,7 @@ int main(int argc, char** argv) {
 	} else if (rank == 1) {
 		errorReporter();
 	} else {
-		ranki(rank, atoi(argv[2]), argv[3][0], dataComm);
+		ranki(atoi(argv[2]), argv[3][0], dataComm);
 	}
 
 
