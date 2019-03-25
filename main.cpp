@@ -11,7 +11,7 @@ struct ModelData {
 	int model;
 	int purchaseDate;
 	char customer;
-	double purchaseAmount;
+	float purchaseAmount;
 };
 
 void printModel(const ModelData & data) {
@@ -34,7 +34,7 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 	for (int i = 0; i < numRecords; i++) {
 		int modelNum, date;
 		char customer;
-		double purchaseAmountInDollars;
+		float purchaseAmountInDollars;
 		input >> modelNum >> date >> customer >> purchaseAmountInDollars;
 		records[i].model = modelNum;
 		records[i].purchaseDate = date;
@@ -63,21 +63,21 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 		MPI_Isend(&records[(i - 1) * num], numRecordsToProcess, ModelDataStruct, i, 1, dataComm, &sendReq[1]);
 	}
 
-	double * entireFile = new double[numModels];
-	double * givenYear = new double[numModels];
-	double * forCustomer = new double[numModels];
-	double * dummy = new double[numModels];
+	float * entireFile = new float[numModels];
+	float * givenYear = new float[numModels];
+	float * forCustomer = new float[numModels];
+	float * dummy = new float[numModels];
 
-	MPI_Reduce(dummy, entireFile, numModels, MPI_DOUBLE, MPI_SUM, 0, dataComm);
-	MPI_Reduce(dummy, givenYear, numModels, MPI_DOUBLE, MPI_SUM, 0, dataComm);
-	MPI_Reduce(dummy, forCustomer, numModels, MPI_DOUBLE, MPI_SUM, 0, dataComm);
+	MPI_Reduce(dummy, entireFile, numModels, MPI_FLOAT, MPI_SUM, 0, dataComm);
+	MPI_Reduce(dummy, givenYear, numModels, MPI_FLOAT, MPI_SUM, 0, dataComm);
+	MPI_Reduce(dummy, forCustomer, numModels, MPI_FLOAT, MPI_SUM, 0, dataComm);
 
 	ModelData f;
 	MPI_Ssend(&f, 1, ModelDataStruct, 1, 0, MPI_COMM_WORLD);
 
 	// Make sure that the error reporting is finished.
-	int temp;
-	MPI_Recv(&temp, 1, MPI_INT, 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+	//int temp;
+	//MPI_Recv(&temp, 1, MPI_INT, 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
 
 	// Final report
@@ -104,9 +104,9 @@ void ranki(int reportYear, char customerType, MPI_Comm dataComm) {
 	MPI_Request req;
 
 	// Process our chunk of data
-	double * entireFile = new double[numModels];
-	double * givenYear = new double[numModels];
-	double * forCustomer = new double[numModels];
+	float * entireFile = new float[numModels];
+	float * givenYear = new float[numModels];
+	float * forCustomer = new float[numModels];
 
 	for (int i = 0; i < numModels; i++) {
 		entireFile[i] = 0.0;
@@ -131,11 +131,11 @@ void ranki(int reportYear, char customerType, MPI_Comm dataComm) {
 		}
 	}
 
-	double * final = new double[numModels];
+	float * final = new float[numModels];
 
-	MPI_Reduce(entireFile, final, numModels, MPI_DOUBLE, MPI_SUM, 0, dataComm);
-	MPI_Reduce(givenYear, final, numModels, MPI_DOUBLE, MPI_SUM, 0, dataComm);
-	MPI_Reduce(forCustomer, final, numModels, MPI_DOUBLE, MPI_SUM, 0, dataComm);
+	MPI_Reduce(entireFile, final, numModels, MPI_FLOAT, MPI_SUM, 0, dataComm);
+	MPI_Reduce(givenYear, final, numModels, MPI_FLOAT, MPI_SUM, 0, dataComm);
+	MPI_Reduce(forCustomer, final, numModels, MPI_FLOAT, MPI_SUM, 0, dataComm);
 
 }
 
@@ -155,8 +155,8 @@ void errorReporter() {
 			printModel(data);
 		}
 	}
-	int temp = 1;
-	MPI_Ssend(&temp, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+	//int temp = 1;
+	//MPI_Ssend(&temp, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
 }
 
 int main(int argc, char** argv) {
@@ -218,7 +218,7 @@ void defineStructDataToMPI(MPI_Datatype * typeToBeCreated) {
 	types[0] = MPI_INT;
 	types[1] = MPI_INT;
 	types[2] = MPI_CHAR;
-	types[3] = MPI_DOUBLE;
+	types[3] = MPI_FLOAT;
 
 	MPI_Type_create_struct(NUM_DATA_FIELDS, blklen, displ, types, typeToBeCreated);
 	MPI_Type_commit(typeToBeCreated);
