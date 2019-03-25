@@ -6,3 +6,6 @@ reportGenerator: main.o
 
 main.o: main.cpp
 	mpic++ $(FLAGS) -c main.cpp
+
+clean:
+	rm *.o reportGenerator
