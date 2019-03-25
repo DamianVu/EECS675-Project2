@@ -7,6 +7,8 @@
 
 static const int NUM_DATA_FIELDS = 4;
 
+#define DEBUG false // True to see debug messages
+
 struct ModelData {
 	int model;
 	int purchaseDate;
@@ -14,9 +16,11 @@ struct ModelData {
 	double purchaseAmount;
 };
 
-void printModel(const ModelData& data) {
+void printModel(const ModelData & data) {
 	std::cout << "{modelNumber: " << data.model << ", date: " << data.purchaseDate << ", customerType: " << data.customer << ", amount: " << data.purchaseAmount << "}\n";
 }
+
+int checkForErrors(const ModelData & data, int numModels); 
 
 std::string errorCode(int tag);
 
@@ -27,7 +31,7 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 	std::fstream input(filename);
 	input >> numRecords >> numModels;
 
-	ModelData records[numRecords];
+	ModelData * records = new ModelData[numRecords];
 
 	for (int i = 0; i < numRecords; i++) {
 		int modelNum, date;
@@ -53,30 +57,93 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 		if (i == communicatorSize - 2) {
 			numRecordsToProcess += numRecords % (communicatorSize - 2);
 		}
-		MPI_Isend(&numRecordsToProcess, 1, MPI_INT, i, 0, dataComm, &sendReq[0]);
+
+		int initData[2];
+		initData[0] = numRecordsToProcess;
+		initData[1] = numModels;
+		MPI_Isend(&initData, 2, MPI_INT, i, 0, dataComm, &sendReq[0]);
 		MPI_Isend(&records[(i - 1) * num], numRecordsToProcess, ModelDataStruct, i, 1, dataComm, &sendReq[1]);
 	}
 
+	double * entireFile = new double[numModels];
+	double * givenYear = new double[numModels];
+	double * forCustomer = new double[numModels];
+	double * dummy = new double[numModels];
+
+	MPI_Reduce(dummy, entireFile, numModels, MPI_DOUBLE, MPI_SUM, 0, dataComm);
+	MPI_Reduce(dummy, givenYear, numModels, MPI_DOUBLE, MPI_SUM, 0, dataComm);
+	MPI_Reduce(dummy, forCustomer, numModels, MPI_DOUBLE, MPI_SUM, 0, dataComm);
+
 	ModelData f;
-	MPI_Isend(&f, 1, ModelDataStruct, 1, 0, MPI_COMM_WORLD, &sendReq[0]);
+	MPI_Ssend(&f, 1, ModelDataStruct, 1, 0, MPI_COMM_WORLD);
+
+	// Make sure that the error reporting is finished.
+	int temp;
+	MPI_Recv(&temp, 1, MPI_INT, 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
 
+	// Final report
+	std::cout << "\n\nFinal Report:\n\n===============\n";
+	std::cout << "Model #\t\tTotal Amounts\tAmounts for " << reportYear << "\tAmounts for customer type " << customerType << "\n";
+	for (int i = 0; i < numModels; i++) {
+		std::cout << i << "\t\t" << entireFile[i] << "\t\t" << givenYear[i] << "\t\t\t" << forCustomer[i] << "\n";
+	}
 
 }
 
-void ranki(int communicatorSize, int rank, MPI_Comm dataComm) {
-	int recordsToProcess;
-	MPI_Recv(&recordsToProcess, 1, MPI_INT, 0, 0, dataComm, MPI_STATUS_IGNORE);
-	std::cout << "Rank " << rank-1 << " should process " << recordsToProcess << " records\n";
+void ranki(int rank, int reportYear, char customerType, MPI_Comm dataComm) {
+	int initData[2];
+	MPI_Recv(&initData, 2, MPI_INT, 0, 0, dataComm, MPI_STATUS_IGNORE);
+	int recordsToProcess = initData[0];
+	int numModels = initData[1];
+	#if DEBUG
+	std::cout << "Rank " << rank-1 << " should process " << recordsToProcess << " records. There are " << numModels << " models\n";
+	#endif
 
 	MPI_Datatype ModelDataStruct;
 	defineStructDataToMPI(&ModelDataStruct);
 
 	ModelData * data = new ModelData[recordsToProcess];
 	MPI_Recv(data, recordsToProcess, ModelDataStruct, 0, 1, dataComm, MPI_STATUS_IGNORE);
+	#if DEBUG
 	std::cout << "Rank " << rank-1 << " received its chunk of model data\n";
+	#endif
+
+	MPI_Request req;
 
 	// Process our chunk of data
+	double * entireFile = new double[numModels];
+	double * givenYear = new double[numModels];
+	double * forCustomer = new double[numModels];
+
+	for (int i = 0; i < numModels; i++) {
+		entireFile[i] = 0.0;
+		givenYear[i] = 0.0;
+		forCustomer[i] = 0.0;
+	}
+
+	for (int i = 0; i < recordsToProcess; i++) {
+		int error = checkForErrors(data[i], numModels);
+		if (error == 0) {
+			// Process it
+			entireFile[data[i].model] += data[i].purchaseAmount;
+			std::string date = std::to_string(data[i].purchaseDate);
+			int year = std::stoi(date.substr(0,4));
+			if (year == reportYear)
+				givenYear[data[i].model] += data[i].purchaseAmount;
+			if (data[i].customer == customerType)
+				forCustomer[data[i].model] += data[i].purchaseAmount;
+		} else {
+			// Report error
+			MPI_Isend(&data[i], 1, ModelDataStruct, 1, error, MPI_COMM_WORLD, &req);
+		}
+	}
+
+	double * final = new double[numModels];
+
+	MPI_Reduce(entireFile, final, numModels, MPI_DOUBLE, MPI_SUM, 0, dataComm);
+	MPI_Reduce(givenYear, final, numModels, MPI_DOUBLE, MPI_SUM, 0, dataComm);
+	MPI_Reduce(forCustomer, final, numModels, MPI_DOUBLE, MPI_SUM, 0, dataComm);
 
 }
 
@@ -96,8 +163,11 @@ void errorReporter() {
 			printModel(data);
 		}
 	}
-
+	int temp = 1;
+	MPI_Ssend(&temp, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+	#if DEBUG
 	std::cout << "Error reported finished\n";
+	#endif
 }
 
 int main(int argc, char** argv) {
@@ -122,7 +192,7 @@ int main(int argc, char** argv) {
 	} else if (rank == 1) {
 		errorReporter();
 	} else {
-		ranki(N, rank, dataComm);
+		ranki(rank, atoi(argv[2]), argv[3][0], dataComm);
 	}
 
 
@@ -166,6 +236,26 @@ void defineStructDataToMPI(MPI_Datatype * typeToBeCreated) {
 
 }
 
+int checkForErrors(const ModelData & data, int numModels) {
+	if (data.model < 0 || data.model >= numModels)
+		return 1;
+	std::string date = std::to_string(data.purchaseDate);
+	if (date.length() != 6)
+		return 2;
+	int year = std::stoi(date.substr(0,4));
+	int month = std::stoi(date.substr(4,2));
+	if (month < 1 || month > 12)
+		return 3;
+	if (year < 1997 || year > 2018)
+		return 4;
+	char c = data.customer;
+	if (!(c == 'G' || c == 'I' || c == 'R'))
+		return 5;
+	if (data.purchaseAmount < 0.0)
+		return 6;
+	return 0;
+}
+
 std::string errorCode(int tag) {
 	switch (tag) {
 		case 1:
@@ -180,5 +270,7 @@ std::string errorCode(int tag) {
 		return "\"Invalid customer type\"";
 		case 6:
 		return "\"Amount of sale < 0\"";
+		default:
+		return "\"?????\"";
 	}
 }
