@@ -25,8 +25,37 @@ std::string errorCode(int tag);
 void defineStructDataToMPI(MPI_Datatype * typeToBeCreated);
 
 void rank0(int communicatorSize, std::string filename, int reportYear, char customerType, MPI_Comm dataComm) {
+	MPI_Datatype ModelDataStruct;
+	defineStructDataToMPI(&ModelDataStruct);
+	MPI_Request sendReq[2];
+	ModelData f;
+
 	int numRecords, numModels;
-	std::fstream input(filename);
+	std::ifstream input(filename);
+	bool badInput = !input;
+	bool badYear = reportYear < 1997 || reportYear > 2018;
+	bool badCustomerType = !(customerType == 'G' || customerType == 'I' || customerType == 'R');
+	if (badInput || badYear || badCustomerType) {
+		if (badInput)
+			std::cout << "Error: Couldn't open file " << filename << "\n";
+		if (badYear)
+			std::cout << "Error: " << reportYear << " is not a valid year\n";
+		if (badCustomerType)
+			std::cout << "Error: " << customerType << " is not a valid customer type\n";
+
+		// Tell rank l processes to end
+		int initData[2];
+		initData[0] = -1;
+		initData[1] = -1;
+		for (int i = 1; i < communicatorSize - 1; i++)
+			MPI_Isend(&initData, 2, MPI_INT, i, 0, dataComm, &sendReq[0]);
+
+		// Tell rank 1 process (error reporter) to end
+		MPI_Isend(&f, 1, ModelDataStruct, 1, 0, MPI_COMM_WORLD, &sendReq[1]);
+
+		MPI_Finalize();
+		exit(0);
+	}
 	input >> numRecords >> numModels;
 
 	ModelData * records = new ModelData[numRecords];
@@ -41,11 +70,6 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 		records[i].customer = customer;
 		records[i].purchaseAmount = purchaseAmountInDollars;
 	}
-
-	MPI_Datatype ModelDataStruct;
-	defineStructDataToMPI(&ModelDataStruct);
-
-	MPI_Request sendReq[2];
 
 	// Send data to all other processes;
 
@@ -72,7 +96,6 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 	MPI_Reduce(dummy, givenYear, numModels, MPI_FLOAT, MPI_SUM, 0, dataComm);
 	MPI_Reduce(dummy, forCustomer, numModels, MPI_FLOAT, MPI_SUM, 0, dataComm);
 
-	ModelData f;
 	MPI_Ssend(&f, 1, ModelDataStruct, 1, 0, MPI_COMM_WORLD);
 
 	// Make sure that the error reporting is finished.
@@ -94,6 +117,11 @@ void ranki(int reportYear, char customerType, MPI_Comm dataComm) {
 	MPI_Recv(&initData, 2, MPI_INT, 0, 0, dataComm, MPI_STATUS_IGNORE);
 	int recordsToProcess = initData[0];
 	int numModels = initData[1];
+	if (recordsToProcess == -1) {
+		// Error.
+		MPI_Finalize();
+		exit(0);
+	}
 
 	MPI_Datatype ModelDataStruct;
 	defineStructDataToMPI(&ModelDataStruct);
