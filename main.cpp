@@ -62,7 +62,7 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 	int num = numRecords / (communicatorSize - 2);
 	int rem = numRecords % (communicatorSize - 2);
 
-	int totalRecords = (num + rem) * (communicatorSize - 2);
+	int totalRecords = (num + rem) * (communicatorSize - 1);
 
 	ModelData * records = new ModelData[totalRecords];
 
