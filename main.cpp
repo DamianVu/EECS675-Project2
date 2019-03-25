@@ -62,13 +62,13 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 	int num = numRecords / (communicatorSize - 2);
 	int rem = numRecords % (communicatorSize - 2);
 
-	int totalRecords = (num + rem) * (communicatorSize - 1);
+	int totalRecords = (num + rem) * (communicatorSize - 2);
 
 	ModelData * records = new ModelData[totalRecords];
 
 	for (int i = 0; i < totalRecords; i++) {
 		if ((i % (num + rem)) - num >= 0) {
-			records[i].model = -1;
+			records[i].model = -42;
 		} else {
 			int modelNum, date;
 			char customer;
@@ -156,6 +156,7 @@ void ranki(int reportYear, char customerType, MPI_Comm dataComm) {
 	}
 
 	for (int i = 0; i < recordsToProcess; i++) {
+		if (data[i].model == -42) continue; // Skip extras
 		int error = checkForErrors(data[i], numModels);
 		if (error == 0) {
 			// Process it
