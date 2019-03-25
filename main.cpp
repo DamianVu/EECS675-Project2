@@ -32,6 +32,8 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 
 	int numRecords, numModels;
 	std::ifstream input(filename);
+
+	// Check if we have any command line argument errors
 	bool badInput = !input;
 	bool badYear = reportYear < 1997 || reportYear > 2018;
 	bool badCustomerType = !(customerType == 'G' || customerType == 'I' || customerType == 'R');
@@ -44,11 +46,10 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 			std::cout << "Error: " << customerType << " is not a valid customer type\n";
 
 		// Tell rank l processes to end
-		int initData[2];
+		int initData[3];
 		initData[0] = -1;
-		initData[1] = -1;
 		for (int i = 1; i < communicatorSize - 1; i++)
-			MPI_Isend(&initData, 2, MPI_INT, i, 0, dataComm, &sendReq[0]);
+			MPI_Isend(&initData, 3, MPI_INT, i, 0, dataComm, &sendReq[0]);
 
 		// Tell rank 1 process (error reporter) to end
 		MPI_Isend(&f, 1, ModelDataStruct, 1, 0, MPI_COMM_WORLD, &sendReq[1]);
@@ -58,34 +59,45 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 	}
 	input >> numRecords >> numModels;
 
-	ModelData * records = new ModelData[numRecords];
+	int num = numRecords / (communicatorSize - 2);
+	int rem = numRecords % (communicatorSize - 2);
 
-	for (int i = 0; i < numRecords; i++) {
-		int modelNum, date;
-		char customer;
-		float purchaseAmountInDollars;
-		input >> modelNum >> date >> customer >> purchaseAmountInDollars;
-		records[i].model = modelNum;
-		records[i].purchaseDate = date;
-		records[i].customer = customer;
-		records[i].purchaseAmount = purchaseAmountInDollars;
+	int totalRecords = (num + rem) * (communicatorSize - 2);
+
+	ModelData * records = new ModelData[totalRecords];
+
+	for (int i = 0; i < totalRecords; i++) {
+		if ((i % (num + rem)) - num >= 0) {
+			records[i].model = -1;
+		} else {
+			int modelNum, date;
+			char customer;
+			float purchaseAmountInDollars;
+			input >> modelNum >> date >> customer >> purchaseAmountInDollars;
+			records[i].model = modelNum;
+			records[i].purchaseDate = date;
+			records[i].customer = customer;
+			records[i].purchaseAmount = purchaseAmountInDollars;
+		}
 	}
 
 	// Send data to all other processes;
+	int recordsToProcess = num + rem;
 
 	for (int i = 1; i < communicatorSize - 1; i++) {
-		int numRecordsToProcess = numRecords / (communicatorSize - 2);
-		int num = numRecordsToProcess;
+		int numRecordsToProcess = num;
 		if (i == communicatorSize - 2) {
-			numRecordsToProcess += numRecords % (communicatorSize - 2);
+			numRecordsToProcess += rem;
 		}
 
-		int initData[2];
+		int initData[3];
 		initData[0] = numRecordsToProcess;
 		initData[1] = numModels;
-		MPI_Isend(&initData, 2, MPI_INT, i, 0, dataComm, &sendReq[0]);
-		MPI_Isend(&records[(i - 1) * num], numRecordsToProcess, ModelDataStruct, i, 1, dataComm, &sendReq[1]);
+		initData[2] = recordsToProcess;
+		MPI_Isend(&initData, 3, MPI_INT, i, 0, dataComm, &sendReq[0]);
 	}
+
+	MPI_Scatter(&records, recordsToProcess, ModelDataStruct, MPI_IN_PLACE, recordsToProcess, ModelDataStruct, 0, dataComm);
 
 	float * entireFile = new float[numModels];
 	float * givenYear = new float[numModels];
@@ -114,9 +126,10 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 
 void ranki(int reportYear, char customerType, MPI_Comm dataComm) {
 	int initData[2];
-	MPI_Recv(&initData, 2, MPI_INT, 0, 0, dataComm, MPI_STATUS_IGNORE);
+	MPI_Recv(&initData, 3, MPI_INT, 0, 0, dataComm, MPI_STATUS_IGNORE);
 	int recordsToProcess = initData[0];
 	int numModels = initData[1];
+	int fullRecord = initData[2];
 	if (recordsToProcess == -1) {
 		// Error.
 		MPI_Finalize();
@@ -126,8 +139,8 @@ void ranki(int reportYear, char customerType, MPI_Comm dataComm) {
 	MPI_Datatype ModelDataStruct;
 	defineStructDataToMPI(&ModelDataStruct);
 
-	ModelData * data = new ModelData[recordsToProcess];
-	MPI_Recv(data, recordsToProcess, ModelDataStruct, 0, 1, dataComm, MPI_STATUS_IGNORE);
+	ModelData * data = new ModelData[fullRecord];
+	MPI_Scatter(&data, fullRecord, ModelDataStruct, &data, fullRecord, ModelDataStruct, 0, dataComm);
 
 	MPI_Request req;
 
