@@ -65,13 +65,8 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 	int totalRecords = (num + rem) * (communicatorSize - 2);
 
 	ModelData * records = new ModelData[totalRecords];
-	bool printTest;
 	for (int i = 0; i < totalRecords; i++) {
-		if (i % (num + rem) == 0) {
-			std::cout << "i: " << i << "\n";
-			printTest = true;
-		}
-		if ((i % (num + rem)) - num >= 0 && i / (num + rem) != (communicatorSize - 2)) {
+		if ((i % (num + rem)) - num >= 0 && i / (num + rem) != (communicatorSize - 3)) {
 			records[i].model = -42;
 			records[i].purchaseDate = -42;
 			records[i].customer = -42;
@@ -85,10 +80,6 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 			records[i].purchaseDate = date;
 			records[i].customer = customer;
 			records[i].purchaseAmount = purchaseAmountInDollars;
-			if (printTest) {
-				std::cout << "ModelNum: " << modelNum << ", i / (num + rem) = " << (i / (num + rem)) << "\n";
-				printTest = false;
-			}
 		}
 	}
 
@@ -135,7 +126,7 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 
 }
 
-void ranki(int reportYear, char customerType, MPI_Comm dataComm) {
+void ranki(int rank, int reportYear, char customerType, MPI_Comm dataComm) {
 	int initData[2];
 	MPI_Recv(&initData, 3, MPI_INT, 0, 0, dataComm, MPI_STATUS_IGNORE);
 	int recordsToProcess = initData[0];
@@ -165,6 +156,13 @@ void ranki(int reportYear, char customerType, MPI_Comm dataComm) {
 		entireFile[i] = 0.0;
 		givenYear[i] = 0.0;
 		forCustomer[i] = 0.0;
+	}
+
+	if (rank == 19) {
+		for (int i = 0; i < fullRecord; i++) {
+			std::cout << i << ": ";
+			printModel(data[i]);
+		}
 	}
 
 	for (int i = 0; i < recordsToProcess; i++) {
@@ -235,7 +233,7 @@ int main(int argc, char** argv) {
 	} else if (rank == 1) {
 		errorReporter();
 	} else {
-		ranki(atoi(argv[2]), argv[3][0], dataComm);
+		ranki(rank, atoi(argv[2]), argv[3][0], dataComm);
 	}
 
 
