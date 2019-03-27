@@ -126,7 +126,7 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 
 }
 
-void ranki(int rank, int reportYear, char customerType, MPI_Comm dataComm) {
+void ranki(int reportYear, char customerType, MPI_Comm dataComm) {
 	int initData[2];
 	MPI_Recv(&initData, 3, MPI_INT, 0, 0, dataComm, MPI_STATUS_IGNORE);
 	int recordsToProcess = initData[0];
@@ -226,7 +226,7 @@ int main(int argc, char** argv) {
 	} else if (rank == 1) {
 		errorReporter();
 	} else {
-		ranki(rank, atoi(argv[2]), argv[3][0], dataComm);
+		ranki(atoi(argv[2]), argv[3][0], dataComm);
 	}
 
 
