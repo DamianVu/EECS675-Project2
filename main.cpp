@@ -65,10 +65,17 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 	int totalRecords = (num + rem) * (communicatorSize - 2);
 
 	ModelData * records = new ModelData[totalRecords];
-
+	bool printTest;
 	for (int i = 0; i < totalRecords; i++) {
+		if (i % (num + rem)) {
+			std::cout << "i: " << i << "\n";
+			printTest = true;
+		}
 		if ((i % (num + rem)) - num >= 0 && i / (num + rem) != (communicatorSize - 1)) {
 			records[i].model = -42;
+			records[i].purchaseDate = -42;
+			records[i].customer = -42;
+			records[i].purchaseAmount = -42;
 		} else {
 			int modelNum, date;
 			char customer;
@@ -78,6 +85,10 @@ void rank0(int communicatorSize, std::string filename, int reportYear, char cust
 			records[i].purchaseDate = date;
 			records[i].customer = customer;
 			records[i].purchaseAmount = purchaseAmountInDollars;
+			if (printTest) {
+				std::cout << "ModelNum: " << modelNum << ", i / (num + rem) = " << (i / (num + rem)) << "\n";
+				printTest = false;
+			}
 		}
 	}
 
